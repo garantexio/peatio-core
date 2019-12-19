@@ -2,8 +2,9 @@ module Peatio::Ranger
   class Connection
     attr_reader :socket, :user, :authorized, :streams, :logger, :id
 
-    def initialize(router, socket, logger)
+    def initialize(authenticator, router, socket, logger)
       @id = SecureRandom.hex(10)
+      @authenticator = authenticator
       @router = router
       @socket = socket
       @logger = logger
@@ -34,11 +35,11 @@ module Peatio::Ranger
       send_raw(payload)
     end
 
-    def authenticate(authenticator, jwt)
+    def authenticate(jwt)
       payload = {}
       authorized = false
       begin
-        payload = authenticator.authenticate!(jwt)
+        payload = @authenticator.authenticate!(jwt)
         authorized = true
       rescue Peatio::Auth::Error => e
         logger.warn e.message
@@ -85,6 +86,21 @@ module Peatio::Ranger
       end
 
       data = JSON.parse(msg)
+
+      unless data["jwt"].to_s.empty?
+        @authorized, payload = authenticate(data["jwt"])
+
+        unless @authorized
+          send :error, message: "Authentication failed."
+          logger.debug "Authentication failed for UID:#{payload[:uid]}"
+        else
+          @user = payload[:uid]
+          @router.on_connection_authenticate(self)
+          logger.info "User #{@user} authenticated #{@streams}"
+          send :success, message: "Authenticated."
+        end
+      end
+
       case data["event"]
       when "subscribe"
         subscribe(data["streams"])
@@ -95,21 +111,20 @@ module Peatio::Ranger
       logger.debug { "#{e}, msg: `#{msg}`" }
     end
 
-    def handshake(authenticator, hs)
+    def handshake(hs)
       query = URI.decode_www_form(hs.query_string)
       subscribe(query.map {|item| item.last if item.first == "stream" })
-      logger.debug "WebSocket connection openned"
+      logger.debug "WebSocket connection opened"
       headers = hs.headers_downcased
       return unless headers.key?("authorization")
 
-      authorized, payload = authenticate(authenticator, headers["authorization"])
+      @authorized, payload = authenticate(headers["authorization"])
 
-      if !authorized
+      unless @authorized
         logger.debug "Authentication failed for UID:#{payload[:uid]}"
         raise EM::WebSocket::HandshakeError, "Authorization failed"
       else
         @user = payload[:uid]
-        @authorized = true
         logger.debug "User #{@user} authenticated #{@streams}"
       end
     end

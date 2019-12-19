@@ -112,11 +112,17 @@ module Peatio::Ranger
 
     def on_connection_open(connection)
       @connections[connection.id] = connection
-      unless connection.authorized
-        @metric_connections_current&.increment(labels: {auth: "public"})
-        @metric_connections_total&.increment(labels: {auth: "public"})
-        return
-      end
+      @metric_connections_current&.increment(labels: {auth: "public"})
+      @metric_connections_total&.increment(labels: {auth: "public"})
+      return unless connection.authorized
+
+      on_connection_authenticate(connection)
+    end
+
+    def on_connection_authenticate(connection)
+      logger.debug { "Connection for user #{connection.user} authenticated." }
+
+      @metric_connections_current&.decrement(labels: {auth: "public"})
       @metric_connections_current&.increment(labels: {auth: "private"})
       @metric_connections_total&.increment(labels: {auth: "private"})
 
@@ -191,6 +197,8 @@ module Peatio::Ranger
         return
       end
 
+      logger.debug { "New ranger message: #{routing_key}" }
+
       type, id, event = routing_key.split(".")
       payload_decoded = JSON.parse(payload)
 
@@ -228,7 +236,7 @@ module Peatio::Ranger
         @stores[key][:increments] << message
       end
 
-      send_public_message(stream, message)
+      send_public_message(id, message)
     end
   end
 end

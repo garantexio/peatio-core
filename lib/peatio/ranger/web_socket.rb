@@ -22,9 +22,9 @@ module Peatio::Ranger
     end
 
     EM::WebSocket.start(host: host, port: port, secure: false) do |socket|
-      connection = Peatio::Ranger::Connection.new(router, socket, logger)
+      connection = Peatio::Ranger::Connection.new(authenticator, router, socket, logger)
       socket.onopen do |hs|
-        connection.handshake(authenticator, hs)
+        connection.handshake(hs)
         router.on_connection_open(connection)
       end
 
