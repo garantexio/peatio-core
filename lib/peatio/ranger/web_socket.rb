@@ -18,6 +18,8 @@ module Peatio::Ranger
       EM.add_periodic_timer(opts[:stats_period]) do
         Peatio::Logger.logger.info { router.stats }
         Peatio::Logger.logger.debug { router.debug }
+
+        Peatio::Logger.logger.info GC.stat
       end
     end
 
