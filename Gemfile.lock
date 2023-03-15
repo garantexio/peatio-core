@@ -2,7 +2,7 @@ PATH
   remote: .
   specs:
     peatio (2.6.2)
-      activemodel (> 5.2, <= 6.0.0)
+      activemodel (> 5.2, <= 7.1.0)
       amqp
       bunny
       clamp
